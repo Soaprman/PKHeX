@@ -14,6 +14,8 @@ namespace PKHeX
         [STAThread]
         private static void Main()
         {
+            // Test change
+
             // Add the event handler for handling UI thread exceptions to the event.
             Application.ThreadException += new ThreadExceptionEventHandler(UIThreadException);
 
