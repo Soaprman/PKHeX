@@ -96,6 +96,7 @@ namespace PKHeX
                     case "EVs": { parseLineEVs(brokenline[1].Trim()); break; }
                     case "IV":
                     case "IVs": { parseLineIVs(brokenline[1].Trim()); break; }
+                    case "Type": { brokenline = new[] {line}; goto default; } // Type: Null edge case
                     default:
                     {
                         // Either Nature or Gender ItemSpecies
@@ -115,7 +116,7 @@ namespace PKHeX
                         {
                             string naturestr = line.Split(' ')[0].Trim();
                             int nature = Array.IndexOf(natures, naturestr);
-                            if (Nature < 0)
+                            if (nature < 0)
                                 InvalidLines.Add($"Unknown Nature: {naturestr}");
                             else
                                 Nature = nature;
@@ -136,16 +137,53 @@ namespace PKHeX
 
             IVs = IVsSpeedFirst;
             EVs = EVsSpeedFirst;
+
+            // Showdown Quirks
+            switch (Species)
+            {
+                case 658: // Greninja
+                    if (Ability == 210) Form += "-Ash"; // Battle Bond
+                    break;
+                case 718: // Zygarde
+                    if (string.IsNullOrEmpty(Form)) Form = "50%";
+                    else if (Form == "Complete") Form = "100%";
+                    if (Ability == 211) Form += "-C"; // Power Construct
+                    break;
+                case 774: // Minior
+                    if (!string.IsNullOrWhiteSpace(Form) && Form != "Meteor")
+                        Form = "C-" + Form;
+                    break;
+            }
         }
         public string getText()
         {
             if (Species == 0 || Species > MAX_SPECIES)
                 return "";
 
+            // Showdown Quirks
+            string form = Form;
+            switch (Species)
+            {
+                case 658: // Greninja
+                    form = form.Replace("Ash", "");
+                    form = form.Replace("Active", "");
+                    break;
+                case 718: // Zygarde
+                    form = form.Replace("-C", "");
+                    form = form.Replace("50%", "");
+                    form = form.Replace("100%", "Complete");
+                    break;
+                case 774: // Minior
+                    if (string.IsNullOrWhiteSpace(form) || form.StartsWith("M-"))
+                        form = "Meteor";
+                    form = form.Replace("C-", "");
+                    break;
+            }
+
             // First Line: Name, Nickname, Gender, Item
             string specForm = species[Species];
-            if (!string.IsNullOrWhiteSpace(Form))
-                specForm += "-" + Form.Replace("Mega ", "Mega-");
+            if (!string.IsNullOrWhiteSpace(form))
+                specForm += "-" + form.Replace("Mega ", "Mega-");
 
             string result = Nickname != null && species[Species] != Nickname ? $"{Nickname} ({specForm})" : $"{specForm}"; 
             if (!string.IsNullOrEmpty(Gender))
@@ -211,7 +249,7 @@ namespace PKHeX
         {
             if (pkm.Species == 0) return "";
 
-            string[] Forms = PKX.getFormList(pkm.Species, types, forms, new[] {"", "F", ""});
+            string[] Forms = PKX.getFormList(pkm.Species, types, forms, new[] {"", "F", ""}, pkm.Format);
             ShowdownSet Set = new ShowdownSet
             {
                 Nickname = pkm.Nickname,

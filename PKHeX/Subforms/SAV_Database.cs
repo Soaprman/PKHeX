@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PKHeX
@@ -80,20 +82,22 @@ namespace PKHeX
                 p.ContextMenuStrip = mnu;
 
             // Load Data
-            RawDB = new List<PKM>();
-            foreach (string file in Directory.GetFiles(DatabasePath, "*", SearchOption.AllDirectories))
+            var dbTemp = new ConcurrentBag<PKM>();
+            var files = Directory.GetFiles(DatabasePath, "*", SearchOption.AllDirectories);
+            Parallel.ForEach(files, file =>
             {
                 FileInfo fi = new FileInfo(file);
-                if (fi.Extension.Contains(".pk") && PKX.getIsPKM(fi.Length))
-                    RawDB.Add(PKMConverter.getPKMfromBytes(File.ReadAllBytes(file), file));
-            }
-            // Fetch from save file
-            foreach (var pkm in Main.SAV.BoxData.Where(pk => pk.Species != 0))
-                RawDB.Add(pkm);
+                if (!fi.Extension.Contains(".pk") || !PKX.getIsPKM(fi.Length)) return;
+                var pk = PKMConverter.getPKMfromBytes(File.ReadAllBytes(file), file);
+                if (pk != null)
+                    dbTemp.Add(pk);
+            });
 
             // Prepare Database
-            RawDB = new List<PKM>(RawDB.Where(pk => pk.ChecksumValid && pk.Species != 0 && pk.Sanity == 0));
-            RawDB = new List<PKM>(RawDB.Distinct());
+            RawDB = new List<PKM>(dbTemp.OrderBy(pk => pk.Identifier)
+                                        .Concat(Main.SAV.BoxData.Where(pk => pk.Species != 0)) // Fetch from save file
+                                        .Where(pk => pk.ChecksumValid && pk.Species != 0 && pk.Sanity == 0)
+                                        .Distinct());
             setResults(RawDB);
 
             Menu_SearchSettings.DropDown.Closing += (sender, e) =>
@@ -115,6 +119,7 @@ namespace PKHeX
         private readonly string Counter;
         private readonly string Viewed;
         private const int MAXFORMAT = 7;
+        private readonly Func<PKM, string> hash = pk => pk.Species.ToString("000") + pk.PID.ToString("X8");
 
         // Important Events
         private void clickView(object sender, EventArgs e)
@@ -155,11 +160,9 @@ namespace PKHeX
                 else
                 {
                     // Data from Box: Delete from save file
-                    string[] split = pk.Identifier.Split(':');
-                    int box = Convert.ToInt32(split[0].Substring(1)) - 1;
-                    int slot = Convert.ToInt32(split[1]) - 1;
-                    int spot = box*30 + slot;
-                    int offset = Main.SAV.getBoxOffset(0) + spot*Main.SAV.SIZE_STORED;
+                    int box = pk.Box-1;
+                    int slot = pk.Slot-1;
+                    int offset = Main.SAV.getBoxOffset(box) + slot*Main.SAV.SIZE_STORED;
                     PKM pkSAV = Main.SAV.getStoredSlot(offset);
 
                     if (pkSAV.Data.SequenceEqual(pk.Data))
@@ -463,9 +466,9 @@ namespace PKHeX
 
             // Filter for Selected Source
             if (!Menu_SearchBoxes.Checked)
-                res = res.Where(pk => pk.Identifier.Contains("db\\"));
+                res = res.Where(pk => pk.Identifier.StartsWith(DatabasePath + Path.DirectorySeparatorChar));
             if (!Menu_SearchDatabase.Checked)
-                res = res.Where(pk => !pk.Identifier.Contains("db\\"));
+                res = res.Where(pk => !pk.Identifier.StartsWith(DatabasePath + Path.DirectorySeparatorChar));
 
             slotSelected = -1; // reset the slot last viewed
             
@@ -487,9 +490,6 @@ namespace PKHeX
                         where split.Length == 2 && !string.IsNullOrWhiteSpace(split[0])
                         select new BatchEditor.StringInstruction { PropertyName = split[0], PropertyValue = split[1], Evaluator = eval }).ToArray();
 
-                if (filters.Any(z => string.IsNullOrWhiteSpace(z.PropertyValue)))
-                { Util.Error("Empty Filter Value detected."); return; }
-
                 BatchEditor.screenStrings(filters);
                 res = res.Where(pkm => // Compare across all filters
                 {
@@ -503,6 +503,13 @@ namespace PKHeX
                     }
                     return true;
                 });
+            }
+
+            if (Menu_SearchClones.Checked)
+            {
+                var r = res.ToArray();
+                var hashes = r.Select(hash).ToArray();
+                res = r.Where((t, i) => hashes.Count(x => x == hashes[i]) > 1).OrderBy(hash);
             }
 
             var results = res.ToArray();
@@ -608,6 +615,36 @@ namespace PKHeX
                 int index = MAXFORMAT - Main.SAV.Generation + 1;
                 CB_Format.SelectedIndex = index < CB_Format.Items.Count ? index : 0; // SAV generation (offset by 1 for "Any")
             }
+        }
+
+        private void Menu_DeleteClones_Click(object sender, EventArgs e)
+        {
+            var dr = Util.Prompt(MessageBoxButtons.YesNo,
+                "Deleting clones from database is not reversible." + Environment.NewLine +
+                "If a PKM is deemed a clone, only the newest file (date modified) will be kept.", "Continue?");
+
+            if (dr != DialogResult.Yes)
+                return;
+
+            var hashes = new List<string>();
+            var deleted = 0;
+            var db = RawDB.Where(pk => pk.Identifier.StartsWith(DatabasePath + Path.DirectorySeparatorChar))
+                .OrderByDescending(file => new FileInfo(file.Identifier).LastWriteTime);
+            foreach (var pk in db)
+            {
+                var h = hash(pk);
+                if (!hashes.Contains(h))
+                { hashes.Add(h); continue; }
+
+                try { File.Delete(pk.Identifier); ++deleted; }
+                catch { Util.Error("Unable to delete clone:" + Environment.NewLine + pk.Identifier); }
+            }
+
+            if (deleted == 0)
+            { Util.Alert("No clones detected or deleted."); return; }
+
+            Util.Alert($"{deleted} files deleted.", "The form will now close.");
+            Close();
         }
     }
 }

@@ -323,6 +323,8 @@ namespace PKHeX
 
             int locval = eggmet ? pk.Egg_Location : pk.Met_Location;
 
+            if (pk.Format == 2)
+                return Main.GameStrings.metGSC_00000[locval];
             if (pk.Format == 3)
                 return Main.GameStrings.metRSEFRLG_00000[locval%0x100];
             if (pk.Gen4 && (eggmet || pk.Format == 4))
@@ -345,7 +347,14 @@ namespace PKHeX
                 if (locval < 60000) return Main.GameStrings.metXY_40000[locval % 10000 - 1];
                                     return Main.GameStrings.metXY_60000[locval % 10000 - 1];
             }
-            return null; // Shouldn't happen.
+            if (pk.Gen7 || pk.Format <= 7)
+            {
+                if (locval < 30000) return Main.GameStrings.metSM_00000[locval];
+                if (locval < 40000) return Main.GameStrings.metSM_30000[locval % 10000 - 1];
+                if (locval < 60000) return Main.GameStrings.metSM_40000[locval % 10000 - 1];
+                                    return Main.GameStrings.metSM_60000[locval % 10000 - 1];
+            }
+            return null; // Shouldn't happen for gen 3+
         }
         public static string[] getQRText(PKM pkm)
         {
@@ -503,11 +512,15 @@ namespace PKHeX
         }
 
         // Data Requests
+        public static Image getBallSprite(int ball)
+        {
+            return (Image)Resources.ResourceManager.GetObject("_ball" + ball) ?? Resources._ball4; // Poké Ball (default)
+        }
         public static Image getSprite(int species, int form, int gender, int item, bool isegg, bool shiny, int generation = -1)
         {
             if (species == 0)
                 return (Image)Resources.ResourceManager.GetObject("_0");
-            if (new[] { 778, 664, 665, 414, 493 }.Contains(species)) // Species who show their default sprite regardless of Form
+            if (new[] { 778, 664, 665, 414, 493, 773 }.Contains(species)) // Species who show their default sprite regardless of Form
                 form = 0;
 
             string file = "_" + species;
@@ -1109,6 +1122,46 @@ namespace PKHeX
             { 1, 0, 1, 1, 1, 1 }, // Dragon
             { 1, 1, 1, 1, 1, 1 }, // Dark
         };
+        
+        /// <summary>
+        /// Converts full width to single width
+        /// </summary>
+        /// <param name="str">Input string to sanitize.</param>
+        /// <returns></returns>
+        public static string SanitizeString(string str)
+        {
+            if (str.Length == 0)
+                return str;
+            var s = str.Replace("\u2019", "\u0027"); // farfetch'd
+            s = s.Replace("\uE08F", "\u2640"); // ♀
+            s = s.Replace("\uE08E", "\u2642"); // ♂
+            return s;
+        }
+        /// <summary>
+        /// Converts full width to half width when appropriate
+        /// </summary>
+        /// <param name="str">Input string to set.</param>
+        /// <param name="species"></param>
+        /// <param name="nicknamed"></param>
+        /// <returns></returns>
+        public static string UnSanitizeString(string str, int species = -1, bool nicknamed = true)
+        {
+            var s = str.Replace("\u0027", "\u2019"); // farfetch'd
+
+            bool foreign = true;
+            if ((species == 029 || species == 032) && !nicknamed)
+                foreign = str[0] != 'N';
+            else if (nicknamed)
+                foreign = str.Select(c => c >> 12).Any(c => c != 0 && c != 0xE);
+
+            if (foreign)
+                return s;
+
+            // Convert back to half width
+            s = s.Replace("\u2640", "\uE08F"); // ♀
+            s = s.Replace("\u2642", "\uE08E"); // ♂
+            return s;
+        }
 
         public static string TrimFromFFFF(string input)
         {
@@ -1895,6 +1948,10 @@ namespace PKHeX
 
             ushort val = g3val > arr.Length ? ushort.MaxValue : arr[g3val];
             return val == ushort.MaxValue ? ITEM_UNK : val;
+        }
+        public static bool isTransferrable34(ushort item)
+        {
+            return item == ITEM_UNK && item > 0;
         }
 
         #region Gen 1 Character Tables

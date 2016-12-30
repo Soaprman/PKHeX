@@ -137,7 +137,7 @@ namespace PKHeX
                         continue;
 
                     invalid++;
-                    rv += $"Invalid: {i.ToString("X2")} @ Region {Blocks[i].Offset.ToString("X5") + Environment.NewLine}";
+                    rv += $"Invalid: {i:X2} @ Region {Blocks[i].Offset:X5}" + Environment.NewLine;
                 }
                 // Return Outputs
                 rv += $"SAV: {Blocks.Length - invalid}/{Blocks.Length + Environment.NewLine}";
@@ -352,10 +352,26 @@ namespace PKHeX
             get { return Data[TrainerCard + 7]; }
             set { Data[TrainerCard + 7] = (byte)value; }
         }
-        public override ulong? GameSyncID
+        public override int GameSyncIDSize => 16; // 64 bits
+        public override string GameSyncID
         {
-            get { return BitConverter.ToUInt64(Data, TrainerCard + 8); }
-            set { BitConverter.GetBytes(value ?? 0).CopyTo(Data, TrainerCard + 8); }
+            get
+            {
+                var data = Data.Skip(TrainerCard + 8).Take(GameSyncIDSize / 2).Reverse().ToArray();
+                return BitConverter.ToString(data).Replace("-", "");
+            }
+            set
+            {
+                if (value == null)
+                    return;
+                if (value.Length > GameSyncIDSize)
+                    return;
+                Enumerable.Range(0, value.Length)
+                     .Where(x => x % 2 == 0)
+                     .Reverse()
+                     .Select(x => Convert.ToByte(value.Substring(x, 2), 16))
+                     .ToArray().CopyTo(Data, TrainerCard + 8);
+            }
         }
         public override int SubRegion
         {
@@ -489,13 +505,44 @@ namespace PKHeX
             get { return Data[PlayTime + 3]; }
             set { Data[PlayTime + 3] = (byte)value; }
         }
-        public uint LastSaved { get { return BitConverter.ToUInt32(Data, PlayTime + 0x4); } set { BitConverter.GetBytes(value).CopyTo(Data, PlayTime + 0x4); } }
-        public int LastSavedYear { get { return (int)(LastSaved & 0xFFF); } set { LastSaved = LastSaved & 0xFFFFF000 | (uint)value; } }
-        public int LastSavedMonth { get { return (int)(LastSaved >> 12 & 0xF); } set { LastSaved = LastSaved & 0xFFFF0FFF | ((uint)value & 0xF) << 12; } }
-        public int LastSavedDay { get { return (int)(LastSaved >> 16 & 0x1F); } set { LastSaved = LastSaved & 0xFFE0FFFF | ((uint)value & 0x1F) << 16; } }
-        public int LastSavedHour { get { return (int)(LastSaved >> 21 & 0x1F); } set { LastSaved = LastSaved & 0xFC1FFFFF | ((uint)value & 0x1F) << 21; } }
-        public int LastSavedMinute { get { return (int)(LastSaved >> 26 & 0x3F); } set { LastSaved = LastSaved & 0x03FFFFFF | ((uint)value & 0x3F) << 26; } }
-        public string LastSavedTime => $"{LastSavedYear.ToString("0000")}{LastSavedMonth.ToString("00")}{LastSavedDay.ToString("00")}{LastSavedHour.ToString("00")}{LastSavedMinute.ToString("00")}";
+        private uint LastSaved { get { return BitConverter.ToUInt32(Data, PlayTime + 0x4); } set { BitConverter.GetBytes(value).CopyTo(Data, PlayTime + 0x4); } }
+        private int LastSavedYear { get { return (int)(LastSaved & 0xFFF); } set { LastSaved = LastSaved & 0xFFFFF000 | (uint)value; } }
+        private int LastSavedMonth { get { return (int)(LastSaved >> 12 & 0xF); } set { LastSaved = LastSaved & 0xFFFF0FFF | ((uint)value & 0xF) << 12; } }
+        private int LastSavedDay { get { return (int)(LastSaved >> 16 & 0x1F); } set { LastSaved = LastSaved & 0xFFE0FFFF | ((uint)value & 0x1F) << 16; } }
+        private int LastSavedHour { get { return (int)(LastSaved >> 21 & 0x1F); } set { LastSaved = LastSaved & 0xFC1FFFFF | ((uint)value & 0x1F) << 21; } }
+        private int LastSavedMinute { get { return (int)(LastSaved >> 26 & 0x3F); } set { LastSaved = LastSaved & 0x03FFFFFF | ((uint)value & 0x3F) << 26; } }
+        private string LastSavedTime => $"{LastSavedYear:0000}{LastSavedMonth:00}{LastSavedDay:00}{LastSavedHour:00}{LastSavedMinute:00}";
+        public DateTime? LastSavedDate
+        {
+            get
+            {
+                return !Util.IsDateValid(LastSavedYear, LastSavedMonth, LastSavedDay)
+                    ? (DateTime?)null
+                    : new DateTime(LastSavedYear, LastSavedMonth, LastSavedDay, LastSavedHour, LastSavedMinute, 0);
+            }
+            set
+            {
+                // Only update the properties if a value is provided.
+                if (value.HasValue)
+                {
+                    var dt = value.Value;
+                    LastSavedYear = dt.Year;
+                    LastSavedMonth = dt.Month;
+                    LastSavedDay = dt.Day;
+                    LastSavedHour = dt.Hour;
+                    LastSavedMinute = dt.Minute;
+                }
+                else // Clear the date.
+                {
+                    // If code tries to access MetDate again, null will be returned.
+                    LastSavedYear = 0;
+                    LastSavedMonth = 0;
+                    LastSavedDay = 0;
+                    LastSavedHour = 0;
+                    LastSavedMinute = 0;
+                }
+            }
+        }
 
         public int ResumeYear { get { return BitConverter.ToInt32(Data, AdventureInfo + 0x4); } set { BitConverter.GetBytes(value).CopyTo(Data,AdventureInfo + 0x4); } }
         public int ResumeMonth { get { return Data[AdventureInfo + 0x8]; } set { Data[AdventureInfo + 0x8] = (byte)value; } }
@@ -705,8 +752,6 @@ namespace PKHeX
                     pk6.CurrentFriendship = pk6.OppositeFriendship;
                 else if (pk6.Moves.Contains(218)) // Frustration
                     pkm.CurrentFriendship = pk6.OppositeFriendship;
-                else if (pk6.CurrentHandler == 1) // OT->HT, needs new Friendship/Affection
-                    pk6.TradeFriendshipAffection(OT);
             }
             pkm.RefreshChecksum();
         }
@@ -912,7 +957,7 @@ namespace PKHeX
             for (int i = 0; i < Data.Length / 0x200; i++)
             {
                 if (!FFFF.SequenceEqual(Data.Skip(i * 0x200).Take(0x200))) continue;
-                r = $"0x200 chunk @ 0x{(i*0x200).ToString("X5")} is FF'd."
+                r = $"0x200 chunk @ 0x{i*0x200:X5} is FF'd."
                     + Environment.NewLine + "Cyber will screw up (as of August 31st 2014)." + Environment.NewLine + Environment.NewLine;
 
                 // Check to see if it is in the Pokedex
@@ -929,7 +974,7 @@ namespace PKHeX
         public override string MiscSaveInfo()
         {
             return Blocks.Aggregate("", (current, b) => current +
-                $"{b.ID.ToString("00")}: {b.Offset.ToString("X5")}-{(b.Offset + b.Length).ToString("X5")}, {b.Length.ToString("X5")}{Environment.NewLine}");
+                $"{b.ID:00}: {b.Offset:X5}-{b.Offset + b.Length:X5}, {b.Length:X5}{Environment.NewLine}");
         }
     }
 }

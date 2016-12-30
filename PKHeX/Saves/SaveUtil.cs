@@ -28,6 +28,7 @@ namespace PKHeX
         internal const int SIZE_G3RAW = 0x20000;
         internal const int SIZE_G3RAWHALF = 0x10000;
         internal const int SIZE_G2RAW_U = 0x8000;
+        internal const int SIZE_G2VC = 0x8010;
         internal const int SIZE_G2BAT_U = 0x802C;
         internal const int SIZE_G2EMU = 0x8030;
         internal const int SIZE_G2RAW_J = 0x10000;
@@ -117,7 +118,7 @@ namespace PKHeX
         /// <returns>Version Identifier or Invalid if type cannot be determined.</returns>
         public static GameVersion getIsG2SAV(byte[] data)
         {
-            if (data.Length != SIZE_G2RAW_U && data.Length != SIZE_G2BAT_U && data.Length != SIZE_G2RAW_J && data.Length != SIZE_G2BAT_J && data.Length != SIZE_G2EMU)
+            if (!new[] {SIZE_G2RAW_J, SIZE_G2RAW_U, SIZE_G2BAT_J, SIZE_G2BAT_U, SIZE_G2EMU, SIZE_G2VC}.Contains(data.Length))
                 return GameVersion.Invalid;
 
             // Check if it's not an american save or a japanese save
@@ -463,8 +464,18 @@ namespace PKHeX
         {
             if (!Directory.Exists(folderPath))
                 return null;
-            return Directory.GetFiles(folderPath, "*", deep ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
-                    .Where(f => SizeValidSAV((int)new FileInfo(f).Length));
+            string[] files = new string[0];
+            try
+            {
+                var searchOption = deep ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                files = Directory.GetFiles(folderPath, "*", searchOption);
+            }
+            catch (ArgumentException)
+            {
+                Util.Error("Error encountered when detecting saves in the following folder:" + Environment.NewLine + folderPath,
+                    "Advise manually scanning to remove bad filenames from the folder." + Environment.NewLine + "Likely caused via Homebrew creating invalid filenames.");
+            }
+            return files.Where(f => SizeValidSAV((int)new FileInfo(f).Length));
         }
 
         /// <summary>
@@ -562,25 +573,11 @@ namespace PKHeX
             if (blockID == 36)
                 new byte[0x80].CopyTo(data, 0x100);
 
-            int len = data.Length;
             ushort chk = (ushort)~initial;
-            if (len > 1)
+            for (int i = 0; i < data.Length; i++)
             {
-                int ofs = -1;
-                if (len % 2 == 0) // always true, always even length
-                {
-                    ofs = 0;
-                    chk = (ushort)(crc16[(data[0] ^ chk) & 0xFF] ^ chk >> 8);
-                }
-
-                for (int i = (len - 1) / 2; i != 0; i--, ofs += 2)
-                {
-                    ushort temp = crc16[(data[ofs + 1] ^ chk) & 0xFF];
-                    chk = (ushort)(crc16[(data[ofs + 2] ^ temp ^ chk >> 8) & 0xFF] ^ (temp ^ chk >> 8) >> 8);
-                }
+                chk = (ushort)(crc16[(data[i] ^ chk) & 0xFF] ^ chk >> 8);
             }
-            if (len > 0)
-                chk = (ushort)(crc16[(data[len - 1] ^ chk) & 0xFF] ^ chk >> 8);
 
             return (ushort)~chk;
         }
