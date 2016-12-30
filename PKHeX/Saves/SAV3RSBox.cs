@@ -5,7 +5,7 @@ namespace PKHeX
 {
     public sealed class SAV3RSBox : SaveFile
     {
-        public override string BAKName => $"{FileName} [{Version} #{SaveCount.ToString("0000")}].bak";
+        public override string BAKName => $"{FileName} [{Version} #{SaveCount:0000}].bak";
         public override string Filter => "GameCube Save File|*.gci|All Files|*.*";
         public override string Extension => ".gci";
 
@@ -67,7 +67,12 @@ namespace PKHeX
         }
 
         // Configuration
-        public override SaveFile Clone() { return new SAV3(Write(DSV: false), Version); }
+        public override SaveFile Clone()
+        {
+            byte[] data = Write(DSV: false).Skip(Header.Length).ToArray();
+            var sav = new SAV3RSBox(data) {Header = (byte[]) Header.Clone()};
+            return sav;
+        }
 
         public override int SIZE_STORED => PKX.SIZE_3STORED + 4;
         public override int SIZE_PARTY => PKX.SIZE_3PARTY; // unused
@@ -106,7 +111,7 @@ namespace PKHeX
             get
             {
                 return string.Join(Environment.NewLine, 
-                    Blocks.Where(b => !b.ChecksumsValid).Select(b => $"Block {b.BlockNumber.ToString("00")} invalid"));
+                    Blocks.Where(b => !b.ChecksumsValid).Select(b => $"Block {b.BlockNumber:00} invalid"));
             }
         }
 

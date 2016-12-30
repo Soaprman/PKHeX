@@ -209,21 +209,12 @@ namespace PKHeX
         #region Block B
         public override string Nickname
         {
-            get
-            {
-                return Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0x40, 24))
-                    .Replace("\uE08F", "\u2640") // nidoran
-                    .Replace("\uE08E", "\u2642") // nidoran
-                    .Replace("\u2019", "\u0027"); // farfetch'd
-            }
+            get { return PKX.SanitizeString(Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0x40, 24))); }
             set
             {
                 if (value.Length > 12)
                     value = value.Substring(0, 12); // Hard cap
-                string TempNick = value // Replace Special Characters and add Terminator
-                    .Replace("\u2640", "\uE08F") // nidoran
-                    .Replace("\u2642", "\uE08E") // nidoran
-                    .Replace("\u0027", "\u2019") // farfetch'd
+                string TempNick = PKX.UnSanitizeString(value)
                     .PadRight(value.Length + 1, '\0'); // Null Terminator
                 Encoding.Unicode.GetBytes(TempNick).CopyTo(Data, 0x40);
             }
@@ -292,26 +283,17 @@ namespace PKHeX
         #region Block C
         public override string HT_Name
         {
-            get
-            {
-                return Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0x78, 24))
-                    .Replace("\uE08F", "\u2640") // nidoran
-                    .Replace("\uE08E", "\u2642") // nidoran
-                    .Replace("\u2019", "\u0027"); // farfetch'd
-            }
+            get { return PKX.SanitizeString(Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0x78, 24))); }
             set
             {
                 if (value.Length > 12)
                     value = value.Substring(0, 12); // Hard cap
-                string TempNick = value // Replace Special Characters and add Terminator
-                    .Replace("\u2640", "\uE08F") // nidoran
-                    .Replace("\u2642", "\uE08E") // nidoran
-                    .Replace("\u0027", "\u2019") // farfetch'd
+                string TempNick = PKX.UnSanitizeString(value)
                     .PadRight(value.Length + 1, '\0'); // Null Terminator
                 Encoding.Unicode.GetBytes(TempNick).CopyTo(Data, 0x78);
             }
         }
-        public int HT_Gender { get { return Data[0x92]; } set { Data[0x92] = (byte)value; } }
+        public override int HT_Gender { get { return Data[0x92]; } set { Data[0x92] = (byte)value; } }
         public override int CurrentHandler { get { return Data[0x93]; } set { Data[0x93] = (byte)value; } }
         public override int Geo1_Region { get { return Data[0x94]; } set { Data[0x94] = (byte)value; } }
         public override int Geo1_Country { get { return Data[0x95]; } set { Data[0x95] = (byte)value; } }
@@ -344,21 +326,12 @@ namespace PKHeX
         #region Block D
         public override string OT_Name
         {
-            get
-            {
-                return Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0xB0, 24))
-                    .Replace("\uE08F", "\u2640") // Nidoran ♂
-                    .Replace("\uE08E", "\u2642") // Nidoran ♀
-                    .Replace("\u2019", "\u0027"); // farfetch'd
-            }
+            get { return PKX.SanitizeString(Util.TrimFromZero(Encoding.Unicode.GetString(Data, 0xB0, 24))); }
             set
             {
                 if (value.Length > 12)
                     value = value.Substring(0, 12); // Hard cap
-                string TempNick = value // Replace Special Characters and add Terminator
-                .Replace("\u2640", "\uE08F") // Nidoran ♂
-                .Replace("\u2642", "\uE08E") // Nidoran ♀
-                .Replace("\u0027", "\u2019") // Farfetch'd
+                string TempNick = PKX.UnSanitizeString(value)
                 .PadRight(value.Length + 1, '\0'); // Null Terminator
                 Encoding.Unicode.GetBytes(TempNick).CopyTo(Data, 0xB0);
             }
@@ -571,6 +544,11 @@ namespace PKHeX
                 TradeGeoLocation(SAV_COUNTRY, SAV_REGION);
 
             CurrentHandler = 1;
+            if (HT_Name != SAV_Trainer)
+            {
+                HT_Friendship = PersonalInfo.BaseFriendship;
+                HT_Affection = 0;
+            }
             HT_Name = SAV_Trainer;
             HT_Gender = SAV_GENDER;
 
@@ -582,9 +560,9 @@ namespace PKHeX
         private void UpdateEgg(int Day, int Month, int Year)
         {
             Met_Location = 30002;
-            Egg_Day = Day;
-            Egg_Month = Month;
-            Egg_Year = Year - 2000;
+            Met_Day = Day;
+            Met_Month = Month;
+            Met_Year = Year - 2000;
         }
         private void TradeGeoLocation(int GeoCountry, int GeoRegion)
         {
@@ -614,16 +592,6 @@ namespace PKHeX
             HT_TextVar = Bank ? 0 : 9; // Somewhere (Bank) : Pokécenter (Trade)
             HT_Intensity = 1;
             HT_Feeling = Util.rand.Next(0, Bank ? 9 : 19); // 0-9 Bank, 0-19 Trade
-        }
-        public void TradeFriendshipAffection(string SAV_TRAINER)
-        {
-            // Don't alter the data if the info is the same.
-            if (SAV_TRAINER == HT_Name) 
-                return;
-
-            // Reset
-            HT_Friendship = PersonalInfo.BaseFriendship;
-            HT_Affection = 0;
         }
 
         // Legality Properties

@@ -7,7 +7,7 @@ namespace PKHeX
 {
     public sealed class SAV4BR : SaveFile
     {
-        public override string BAKName => $"{FileName} [{Version} #{SaveCount.ToString("0000")}].bak";
+        public override string BAKName => $"{FileName} [{Version} #{SaveCount:0000}].bak";
         public override string Filter => "PbrSaveData|*";
         public override string Extension => "";
 
@@ -24,6 +24,7 @@ namespace PKHeX
             Data = DecryptPBRSaveData(data);
 
             // Detect active save
+            SaveCount = Math.Max(BigEndian.ToUInt32(Data, 0x1C004C), BigEndian.ToUInt32(Data, 0x4C));
             if (BigEndian.ToUInt32(Data, 0x1C004C) > BigEndian.ToUInt32(Data, 0x4C))
             {
                 byte[] tempData = new byte[0x1C0000];
@@ -52,7 +53,7 @@ namespace PKHeX
                 resetBoxes();
         }
 
-        private readonly int SaveCount; // TODO : unique save identification
+        private readonly uint SaveCount;
         public override byte[] Write(bool DSV)
         {
             setChecksums();

@@ -13,7 +13,7 @@ namespace PKHeX
 
             // Do first
             pk7.Stat_Level = PKX.getLevel(pk7.Species, pk7.EXP);
-            if (pk7.Stat_Level == 100)
+            if (pk7.Stat_Level == 100 && !HaX)
                 pk7.EXP = PKX.getEXP(pk7.Stat_Level, pk7.Species);
 
             CB_Species.SelectedValue = pk7.Species;
@@ -56,14 +56,7 @@ namespace PKHeX
             CB_EncounterType.SelectedValue = pk7.Gen4 ? pk7.EncounterType : 0;
             CB_Ball.SelectedValue = pk7.Ball;
 
-            if (pk7.MetDate.HasValue)
-            {
-                CAL_MetDate.Value = pk7.MetDate.Value;
-            }
-            else
-            {
-                CAL_MetDate.Value = new DateTime(2000, 1, 1);
-            }
+            CAL_MetDate.Value = pk7.MetDate ?? new DateTime(2000, 1, 1);
 
             if (pk7.Egg_Location != 0)
             {
@@ -72,14 +65,7 @@ namespace PKHeX
                 GB_EggConditions.Enabled = true;
 
                 CB_EggLocation.SelectedValue = pk7.Egg_Location;
-                if (pk7.EggMetDate.HasValue)
-                {
-                    CAL_EggDate.Value = pk7.EggMetDate.Value;
-                }
-                else
-                {
-                    CAL_EggDate.Value = new DateTime(2000, 1, 1);
-                }
+                CAL_EggDate.Value = pk7.EggMetDate ?? new DateTime(2000, 1, 1);
             }
             else { CAL_EggDate.Value = new DateTime(2000, 01, 01); CHK_AsEgg.Checked = GB_EggConditions.Enabled = false; CB_EggLocation.SelectedValue = 0; }
 
@@ -265,7 +251,7 @@ namespace PKHeX
             pk7.HT_Name = TB_OTt2.Text;
 
             // 0x90-0xAF
-            pk7.HT_Gender = PKX.getGender(Label_CTGender.Text);
+            pk7.HT_Gender = PKX.getGender(Label_CTGender.Text) & 1;
             // Plus more, set by MemoryAmie (already in buff)
 
             // Block D

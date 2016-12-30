@@ -15,19 +15,38 @@ namespace PKHeX
             InitializeComponent();
             DragDrop += tabMain_DragDrop;
             DragEnter += tabMain_DragEnter;
+
+            CB_Format.Items.Clear();
+            CB_Format.Items.Add("All");
+            foreach (Type t in types) CB_Format.Items.Add(t.Name.ToLower());
+            CB_Format.Items.Add("Any");
+
             CB_Format.SelectedIndex = CB_Require.SelectedIndex = 0;
+        }
+        private static string[][] getPropArray()
+        {
+            var p = new string[types.Length][];
+            for (int i = 0; i < p.Length; i++)
+                p[i] = ReflectUtil.getPropertiesCanWritePublic(types[i]).ToArray();
+
+            IEnumerable<string> all = p.SelectMany(prop => prop).Distinct();
+            IEnumerable<string> any = p[0];
+            for (int i = 1; i < p.Length; i++)
+                any = any.Union(p[i]);
+
+            var p1 = new string[types.Length + 2][];
+            Array.Copy(p, 0, p1, 1, p.Length);
+            p1[0] = all.ToArray();
+            p1[p1.Length-1] = any.ToArray();
+
+            return p1;
         }
 
         private const string CONST_RAND = "$rand";
         private const string CONST_SHINY = "$shiny";
         private int currentFormat = -1;
-        private static readonly string[] pk7 = ReflectUtil.getPropertiesCanWritePublic(typeof(PK6)).OrderBy(i => i).ToArray();
-        private static readonly string[] pk6 = ReflectUtil.getPropertiesCanWritePublic(typeof(PK6)).OrderBy(i=>i).ToArray();
-        private static readonly string[] pk5 = ReflectUtil.getPropertiesCanWritePublic(typeof(PK5)).OrderBy(i=>i).ToArray();
-        private static readonly string[] pk4 = ReflectUtil.getPropertiesCanWritePublic(typeof(PK4)).OrderBy(i=>i).ToArray();
-        private static readonly string[] pk3 = ReflectUtil.getPropertiesCanWritePublic(typeof(PK3)).OrderBy(i=>i).ToArray();
-        private static readonly string[] all = pk7.Intersect(pk6).Intersect(pk5).Intersect(pk4).Intersect(pk3).OrderBy(i => i).ToArray();
-        private static readonly string[] any = pk7.Union(pk6).Union(pk5).Union(pk4).Union(pk3).Distinct().OrderBy(i => i).ToArray();
+        private static readonly Type[] types = {typeof (PK7), typeof (PK6), typeof (PK5), typeof (PK4), typeof (PK3)};
+        private static readonly string[][] properties = getPropArray();
 
         // GUI Methods
         private void B_Open_Click(object sender, EventArgs e)
@@ -64,8 +83,15 @@ namespace PKHeX
             { Util.Error("Empty Filter Value detected."); return; }
 
             var Instructions = getInstructions().ToList();
-            if (Instructions.Any(z => string.IsNullOrWhiteSpace(z.PropertyValue)))
-            { Util.Error("Empty Property Value detected."); return; }
+            var emptyVal = Instructions.Where(z => string.IsNullOrWhiteSpace(z.PropertyValue)).ToArray();
+            if (emptyVal.Any())
+            {
+                string props = string.Join(", ", emptyVal.Select(z => z.PropertyName));
+                if (DialogResult.Yes != Util.Prompt(MessageBoxButtons.YesNo, 
+                    $"Empty Property Value{(emptyVal.Length > 1 ? "s" : "")} detected:" + Environment.NewLine + props,
+                    "Continue?"))
+                    return;
+            }
 
             string destPath = "";
             if (RB_Path.Checked)
@@ -164,7 +190,7 @@ namespace PKHeX
             for (int i = 0; i < data.Length; i++)
             {
                 var pkm = data[i];
-                if (!pkm.Valid)
+                if (!pkm.Valid || pkm.Locked)
                 {
                     b.ReportProgress(i);
                     continue;
@@ -230,15 +256,39 @@ namespace PKHeX
         {
             foreach (var i in il.Where(i => !i.PropertyValue.All(char.IsDigit)))
             {
+                string pv = i.PropertyValue;
+                if (pv.StartsWith("$") && pv.Contains(','))
+                {
+                    string str = pv.Substring(1);
+                    var split = str.Split(',');
+                    int.TryParse(split[0], out i.Min);
+                    int.TryParse(split[1], out i.Max);
+
+                    if (i.Min == i.Max)
+                    {
+                        i.PropertyValue = i.Min.ToString();
+                        Console.WriteLine(i.PropertyName + " randomization range Min/Max same?");
+                    }
+                    else
+                        i.Random = true;
+                }
+
                 switch (i.PropertyName)
                 {
-                    case "Species": i.setScreenedValue(Main.GameStrings.specieslist); continue;
-                    case "HeldItem": i.setScreenedValue(Main.GameStrings.itemlist); continue;
-                    case "Move1": case "Move2": case "Move3": case "Move4": i.setScreenedValue(Main.GameStrings.movelist); continue;
-                    case "RelearnMove1": case "RelearnMove2": case "RelearnMove3": case "RelearnMove4": i.setScreenedValue(Main.GameStrings.movelist); continue;
-                    case "Ability": i.setScreenedValue(Main.GameStrings.abilitylist); continue;
-                    case "Nature": i.setScreenedValue(Main.GameStrings.natures); continue;
-                    case "Ball": i.setScreenedValue(Main.GameStrings.balllist); continue;
+                    case nameof(PKM.Species): i.setScreenedValue(Main.GameStrings.specieslist); continue;
+                    case nameof(PKM.HeldItem): i.setScreenedValue(Main.GameStrings.itemlist); continue;
+                    case nameof(PKM.Ability): i.setScreenedValue(Main.GameStrings.abilitylist); continue;
+                    case nameof(PKM.Nature): i.setScreenedValue(Main.GameStrings.natures); continue;
+                    case nameof(PKM.Ball): i.setScreenedValue(Main.GameStrings.balllist); continue;
+                    case nameof(PKM.Move1):
+                    case nameof(PKM.Move2):
+                    case nameof(PKM.Move3):
+                    case nameof(PKM.Move4):
+                    case nameof(PKM.RelearnMove1):
+                    case nameof(PKM.RelearnMove2):
+                    case nameof(PKM.RelearnMove3):
+                    case nameof(PKM.RelearnMove4):
+                        i.setScreenedValue(Main.GameStrings.movelist); continue;
                 }
             }
         }
@@ -257,6 +307,23 @@ namespace PKHeX
             RB_SAV.Checked = false;
             RB_Path.Checked = true;
         }
+        private void CB_Property_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            L_PropType.Text = getPropertyType(CB_Property.Text);
+        }
+        private string getPropertyType(string propertyName)
+        {
+            int typeIndex = CB_Format.SelectedIndex;
+            
+            if (typeIndex == 0) // All
+                return types[0].GetProperty(propertyName).PropertyType.Name;
+
+            if (typeIndex == properties.Length - 1) // Any
+                foreach (var p in types.Select(t => t.GetProperty(propertyName)).Where(p => p != null))
+                    return p.PropertyType.Name;
+            
+            return types[typeIndex - 1].GetProperty(propertyName).PropertyType.Name;
+        }
 
         // Utility Methods
         public class StringInstruction
@@ -269,6 +336,11 @@ namespace PKHeX
                 int index = Array.IndexOf(arr, PropertyValue);
                 PropertyValue = index > -1 ? index.ToString() : PropertyValue;
             }
+
+            // Extra Functionality
+            public bool Random;
+            public int Min, Max;
+            public int RandomValue => Util.rand.Next(Min, Max + 1);
         }
         private enum ModifyResult
         {
@@ -305,20 +377,24 @@ namespace PKHeX
             {
                 try
                 {
-                    if (cmd.PropertyName == "MetDate")
+                    if (cmd.PropertyName == nameof(PKM.MetDate))
                         PKM.MetDate = DateTime.ParseExact(cmd.PropertyValue, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None);
-                    else if (cmd.PropertyName == "EggMetDate")
+                    else if (cmd.PropertyName == nameof(PKM.EggMetDate))
                         PKM.EggMetDate = DateTime.ParseExact(cmd.PropertyValue, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None);
-                    else if (cmd.PropertyName == "EncryptionConstant" && cmd.PropertyValue == CONST_RAND)
+                    else if (cmd.PropertyName == nameof(PKM.EncryptionConstant) && cmd.PropertyValue == CONST_RAND)
                         ReflectUtil.SetValue(PKM, cmd.PropertyName, Util.rnd32().ToString());
-                    else if(cmd.PropertyName == "PID" && cmd.PropertyValue == CONST_RAND)
+                    else if(cmd.PropertyName == nameof(PKM.PID) && cmd.PropertyValue == CONST_RAND)
                         PKM.setPIDGender(PKM.Gender);
-                    else if (cmd.PropertyName == "EncryptionConstant" && cmd.PropertyValue == "PID")
+                    else if (cmd.PropertyName == nameof(PKM.EncryptionConstant) && cmd.PropertyValue == nameof(PKM.PID))
                         PKM.EncryptionConstant = PKM.PID;
-                    else if (cmd.PropertyName == "PID" && cmd.PropertyValue == CONST_SHINY)
+                    else if (cmd.PropertyName == nameof(PKM.PID) && cmd.PropertyValue == CONST_SHINY)
                         PKM.setShinyPID();
-                    else if (cmd.PropertyName == "Species" && cmd.PropertyValue == "0")
+                    else if (cmd.PropertyName == nameof(PKM.Species) && cmd.PropertyValue == "0")
                         PKM.Data = new byte[PKM.Data.Length];
+                    else if (cmd.PropertyName.StartsWith("IV") && cmd.PropertyValue == CONST_RAND)
+                        setRandomIVs(PKM, cmd);
+                    else if (cmd.Random)
+                        ReflectUtil.SetValue(PKM, cmd.PropertyName, cmd.RandomValue);
                     else
                         ReflectUtil.SetValue(PKM, cmd.PropertyName, cmd.PropertyValue);
 
@@ -327,6 +403,23 @@ namespace PKHeX
                 catch { Console.WriteLine($"Unable to set {cmd.PropertyName} to {cmd.PropertyValue}."); }
             }
             return result;
+        }
+        private static void setRandomIVs(PKM PKM, StringInstruction cmd)
+        {
+            int MaxIV = PKM.Format <= 2 ? 15 : 31;
+            if (cmd.PropertyName == "IVs")
+            {
+                bool IV3 = Legal.Legends.Contains(PKM.Species) || Legal.SubLegends.Contains(PKM.Species);
+                int[] IVs = new int[6];
+                do
+                {
+                    for (int i = 0; i < 6; i++)
+                        IVs[i] = (int)(Util.rnd32() & MaxIV);
+                } while (IV3 && IVs.Where(i => i == MaxIV).Count() < 3);
+                ReflectUtil.SetValue(PKM, cmd.PropertyName, IVs);
+            }
+            else
+                ReflectUtil.SetValue(PKM, cmd.PropertyName, Util.rnd32() & MaxIV);
         }
 
         private void B_Add_Click(object sender, EventArgs e)
@@ -347,18 +440,11 @@ namespace PKHeX
             if (currentFormat == CB_Format.SelectedIndex)
                 return;
 
+            int format = CB_Format.SelectedIndex;
             CB_Property.Items.Clear();
-            switch (CB_Format.SelectedIndex)
-            {
-                case 0: CB_Property.Items.AddRange(all.ToArray()); break; // All
-                case 1: CB_Property.Items.AddRange(pk6.ToArray()); break;
-                case 2: CB_Property.Items.AddRange(pk5.ToArray()); break;
-                case 3: CB_Property.Items.AddRange(pk4.ToArray()); break;
-                case 4: CB_Property.Items.AddRange(pk3.ToArray()); break;
-                case 5: CB_Property.Items.AddRange(any.ToArray()); break; // Any
-            }
+            CB_Property.Items.AddRange(properties[format]);
             CB_Property.SelectedIndex = 0;
-            currentFormat = CB_Format.SelectedIndex;
+            currentFormat = format;
         }
     }
 }

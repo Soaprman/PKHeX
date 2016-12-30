@@ -28,6 +28,10 @@ PKHeX is a Windows Forms application which requires .NET Framework v4.0.
 
 The executable can be built with any compiler that supports C# 6.0.
 
+### Build Configurations
+
+Use the Debug or Release build configurations when building using the .Net Framework.  Use the Mono-Debug or Mono-Release build configurations when building using Mono.
+
 ## Dependencies
 
 PKHeX's QR code generation code is taken from [QRCoder](https://github.com/codebude/QRCoder), which is licensed under [the MIT license](https://github.com/codebude/QRCoder/blob/master/LICENSE.txt).
@@ -38,4 +42,4 @@ PKHeX can be opened with IDEs such as [Visual Studio](https://www.visualstudio.c
 
 ### GNU/Linux
 
-On Debian, you can install MonoDevelop and [Mono](http://www.mono-project.com/) runtime with `sudo apt-get install monodevelop`. GNU/Linux is not the main Operating System of developers of this program so there may be bugs; some may come from non GNU/Linux specific code of Mono (so developers using *BSD, Windows and OS X should be able to reproduce them).
+Install MonoDevelop and [Mono](http://www.mono-project.com/) runtime with `flatpak install --user --from https://download.mono-project.com/repo/monodevelop.flatpakref`. GNU/Linux is not the main Operating System of developers of this program so there may be bugs; some may come from non GNU/Linux specific code of Mono (so developers using *BSD, Windows and OS X should be able to reproduce them).

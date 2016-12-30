@@ -85,7 +85,7 @@ namespace PKHeX
                 var metSanitize = (string[])metCXD_00000.Clone();
                 for (int i = 0; i < metSanitize.Length; i++)
                     if (metCXD_00000.Count(r => r == metSanitize[i]) > 1)
-                        metSanitize[i] += $" [{i.ToString("000")}]";
+                        metSanitize[i] += $" [{i:000}]";
                 metCXD_00000 = metSanitize;
 
                 // Current Generation strings
@@ -161,6 +161,7 @@ namespace PKHeX
                 itemlist[751] += " (2)"; // Meteorite
                 itemlist[771] += " (3)"; // Meteorite
                 itemlist[772] += " (4)"; // Meteorite
+                itemlist[842] += " (SM)"; // Fishing Rod
 
                 // Append Z-Crystal flagging
                 foreach (var i in Legal.Pouch_ZCrystal_SM)

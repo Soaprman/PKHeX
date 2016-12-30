@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -11,7 +12,7 @@ namespace PKHeX
         {
             Loading = true;
             InitializeComponent();
-            if (!Main.unicode)
+            if (Main.unicode)
             try { TB_OTName.Font = PKX.getPKXFont(11); }
             catch (Exception e) { Util.Alert("Font loading failed...", e.ToString()); }
 
@@ -23,11 +24,24 @@ namespace PKHeX
             
             getComboBoxes();
             getTextBoxes();
+
+            CB_Stats.Items.Clear();
+            for (int i = 0; i < 200; i++)
+            {
+                string name;
+                if (!RecordList.TryGetValue(i, out name))
+                    name =  i.ToString("D3");
+
+                CB_Stats.Items.Add(name);
+            }
+            CB_Stats.SelectedIndex = RecordList.First().Key;
+
             Loading = false;
         }
         private readonly ToolTip Tip1 = new ToolTip(), Tip2 = new ToolTip();
         private readonly bool Loading;
         private bool MapUpdated;
+        private bool editing;
 
         private void getComboBoxes()
         {
@@ -55,7 +69,7 @@ namespace PKHeX
             var alolatime_list = new[] { new { Text = "Sun Time", Value = 24*60*60 } };
             Array.Resize(ref alolatime_list, 24);
             for (int i = 1; i < 24; i++)
-                alolatime_list[i] = new {Text = $"+{i.ToString("00")} Hours", Value = i*60*60};
+                alolatime_list[i] = new {Text = $"+{i:00} Hours", Value = i*60*60};
             alolatime_list[12] = new {Text = "Moon Time", Value = 12 * 60 * 60};
 
             CB_3DSReg.DisplayMember = "Text";
@@ -73,6 +87,14 @@ namespace PKHeX
             CB_Region.DisplayMember = "Text";
             CB_Region.ValueMember = "Value";
             Main.setCountrySubRegion(CB_Country, "countries");
+
+            CB_SkinColor.Items.Clear();
+            string[] skinColors = { "Pale", "Default", "Tan", "Dark" };
+            foreach (string c in skinColors)
+            {
+                CB_SkinColor.Items.Add($"{Main.gendersymbols[0]} - {c}"); // M
+                CB_SkinColor.Items.Add($"{Main.gendersymbols[1]} - {c}"); // F
+            }
         }
         private void getTextBoxes()
         {
@@ -115,15 +137,48 @@ namespace PKHeX
             MT_Minutes.Text = SAV.PlayedMinutes.ToString();
             MT_Seconds.Text = SAV.PlayedSeconds.ToString();
             
-            CAL_LastSavedDate.Value = new DateTime(SAV.LastSavedYear, SAV.LastSavedMonth, SAV.LastSavedDay);
-            CAL_LastSavedTime.Value = new DateTime(2000, 1, 1, SAV.LastSavedHour, SAV.LastSavedMinute, 0);
+            if (SAV.LastSavedDate.HasValue)
+            {
+                CAL_LastSavedDate.Value = SAV.LastSavedDate.Value;
+                CAL_LastSavedTime.Value = SAV.LastSavedDate.Value;
+            }
+            else
+            {
+                L_LastSaved.Visible = CAL_LastSavedDate.Visible = CAL_LastSavedTime.Visible = false;
+            }
+                
             CAL_AdventureStartDate.Value = new DateTime(2000, 1, 1).AddSeconds(SAV.SecondsToStart);
             CAL_AdventureStartTime.Value = new DateTime(2000, 1, 1).AddSeconds(SAV.SecondsToStart % 86400);
             CAL_HoFDate.Value = new DateTime(2000, 1, 1).AddSeconds(SAV.SecondsToFame);
             CAL_HoFTime.Value = new DateTime(2000, 1, 1).AddSeconds(SAV.SecondsToFame % 86400);
 
             NUD_BP.Value = Math.Min(NUD_BP.Maximum, SAV.BP);
-            NUD_FC.Value = Math.Min(NUD_BP.Maximum, SAV.FestaCoins);
+            NUD_FC.Value = Math.Min(NUD_FC.Maximum, SAV.FestaCoins);
+
+            // Poké Finder
+            NUD_SnapCount.Value = Math.Min(NUD_SnapCount.Maximum, SAV.PokeFinderSnapCount);
+            NUD_ThumbsTotal.Value = Math.Min(NUD_SnapCount.Maximum, SAV.PokeFinderThumbsTotalValue);
+            NUD_ThumbsRecord.Value = Math.Min(NUD_SnapCount.Maximum, SAV.PokeFinderThumbsHighValue);
+
+            CB_CameraVersion.SelectedIndex = Math.Min(CB_CameraVersion.Items.Count - 1, SAV.PokeFinderCameraVersion);
+            CHK_Gyro.Checked = SAV.PokeFinderGyroFlag;
+
+            // Battle Tree
+            NUD_RCStreak0.Value = Math.Min(NUD_RCStreak0.Maximum, SAV.getTreeStreak(0, super: false, max: false));
+            NUD_RCStreak1.Value = Math.Min(NUD_RCStreak1.Maximum, SAV.getTreeStreak(1, super: false, max: false));
+            NUD_RCStreak2.Value = Math.Min(NUD_RCStreak2.Maximum, SAV.getTreeStreak(2, super: false, max: false));
+            NUD_RMStreak0.Value = Math.Min(NUD_RMStreak0.Maximum, SAV.getTreeStreak(0, super: false, max: true));
+            NUD_RMStreak1.Value = Math.Min(NUD_RMStreak1.Maximum, SAV.getTreeStreak(1, super: false, max: true));
+            NUD_RMStreak2.Value = Math.Min(NUD_RMStreak2.Maximum, SAV.getTreeStreak(2, super: false, max: true));
+
+            NUD_SCStreak0.Value = Math.Min(NUD_SCStreak0.Maximum, SAV.getTreeStreak(0, super: true, max: false));
+            NUD_SCStreak1.Value = Math.Min(NUD_SCStreak1.Maximum, SAV.getTreeStreak(1, super: true, max: false));
+            NUD_SCStreak2.Value = Math.Min(NUD_SCStreak2.Maximum, SAV.getTreeStreak(2, super: true, max: false));
+            NUD_SMStreak0.Value = Math.Min(NUD_SMStreak0.Maximum, SAV.getTreeStreak(0, super: true, max: true));
+            NUD_SMStreak1.Value = Math.Min(NUD_SMStreak1.Maximum, SAV.getTreeStreak(1, super: true, max: true));
+            NUD_SMStreak2.Value = Math.Min(NUD_SMStreak2.Maximum, SAV.getTreeStreak(2, super: true, max: true));
+
+            CB_SkinColor.SelectedIndex = SAV.DressUpSkinColor;
         }
         private void save()
         {
@@ -166,14 +221,36 @@ namespace PKHeX
             fame += (int)(CAL_HoFTime.Value - new DateTime(2000, 1, 1)).TotalSeconds;
             SAV.SecondsToFame = fame;
 
-            SAV.LastSavedYear = CAL_LastSavedDate.Value.Year;
-            SAV.LastSavedMonth = CAL_LastSavedDate.Value.Month;
-            SAV.LastSavedDay = CAL_LastSavedDate.Value.Day;
-            SAV.LastSavedHour = CAL_LastSavedTime.Value.Hour;
-            SAV.LastSavedMinute = CAL_LastSavedTime.Value.Minute;
+            if (SAV.LastSavedDate.HasValue)
+                SAV.LastSavedDate = new DateTime(CAL_LastSavedDate.Value.Year, CAL_LastSavedDate.Value.Month, CAL_LastSavedDate.Value.Day, CAL_LastSavedTime.Value.Hour, CAL_LastSavedTime.Value.Minute, 0);
 
             SAV.BP = (uint)NUD_BP.Value;
             SAV.FestaCoins = (uint)NUD_FC.Value;
+
+            // Poké Finder
+            SAV.PokeFinderSnapCount = (uint)NUD_SnapCount.Value;
+            SAV.PokeFinderThumbsTotalValue = (uint)NUD_ThumbsTotal.Value;
+            SAV.PokeFinderThumbsHighValue = (uint)NUD_ThumbsRecord.Value;
+
+            SAV.PokeFinderCameraVersion = (ushort)CB_CameraVersion.SelectedIndex;
+            SAV.PokeFinderGyroFlag = CHK_Gyro.Checked;
+
+            // Battle Tree
+            SAV.setTreeStreak((int)NUD_RCStreak0.Value, 0, super:false, max:false);
+            SAV.setTreeStreak((int)NUD_RCStreak1.Value, 1, super:false, max:false);
+            SAV.setTreeStreak((int)NUD_RCStreak2.Value, 2, super:false, max:false);
+            SAV.setTreeStreak((int)NUD_RMStreak0.Value, 0, super:false, max:true);
+            SAV.setTreeStreak((int)NUD_RMStreak1.Value, 1, super:false, max:true);
+            SAV.setTreeStreak((int)NUD_RMStreak2.Value, 2, super:false, max:true);
+
+            SAV.setTreeStreak((int)NUD_SCStreak0.Value, 0, super:true, max:false);
+            SAV.setTreeStreak((int)NUD_SCStreak1.Value, 1, super:true, max:false);
+            SAV.setTreeStreak((int)NUD_SCStreak2.Value, 2, super:true, max:false);
+            SAV.setTreeStreak((int)NUD_SMStreak0.Value, 0, super:true, max:true);
+            SAV.setTreeStreak((int)NUD_SMStreak1.Value, 1, super:true, max:true);
+            SAV.setTreeStreak((int)NUD_SMStreak2.Value, 2, super:true, max:true);
+
+            SAV.DressUpSkinColor = CB_SkinColor.SelectedIndex;
         }
 
         private void clickOT(object sender, MouseEventArgs e)
@@ -196,8 +273,8 @@ namespace PKHeX
             string IDstr = "TSV: " + tsv.ToString("0000");
             if (SAV.Generation > 6) // always true for G7
                 IDstr += Environment.NewLine + "G7TID: " + SAV.TrainerID7.ToString("000000");
-            Tip1.SetToolTip(MT_TID, "TSV: " + IDstr);
-            Tip2.SetToolTip(MT_SID, "TSV: " + IDstr);
+            Tip1.SetToolTip(MT_TID, IDstr);
+            Tip2.SetToolTip(MT_SID, IDstr);
         }
 
         private void B_Cancel_Click(object sender, EventArgs e)
@@ -245,5 +322,63 @@ namespace PKHeX
             byte[] data = SAV.Gender == 0 ? Properties.Resources.fashion_m_sm : Properties.Resources.fashion_f_sm;
             data.CopyTo(SAV.Data, SAV.Fashion);
         }
+        private void changeStat(object sender, EventArgs e)
+        {
+            editing = true;
+            int index = CB_Stats.SelectedIndex;
+            NUD_Stat.Maximum = SAV.getRecordMax(index);
+            NUD_Stat.Value = SAV.getRecord(index);
+
+            int offset = SAV.getRecordOffset(index);
+            L_Offset.Text = "Offset: 0x" + offset.ToString("X3");
+            editing = false;
+        }
+        private void changeStatVal(object sender, EventArgs e)
+        {
+            if (editing) return;
+            int index = CB_Stats.SelectedIndex;
+            SAV.setRecord(index, (int)NUD_Stat.Value);
+        }
+
+        private readonly Dictionary<int, string> RecordList = new Dictionary<int, string>
+        {
+            {004, "Wild Pokémon Battles"},
+            {006, "Pokemon Caught"},
+            {008, "Eggs Hatched"},
+            {011, "Link Trades"},
+            {015, "Battle Spot Battles"},
+            {019, "Money Spent"},
+            {022, "Exp. Points Collected"},
+            {024, "Deposited in the GTS"},
+            {025, "Nicknames Given"},
+            {028, "Battle Points Spent"},
+            {029, "Super Effective Moves Used"},
+            {032, "Berry Harvests"},
+            {033, "Trades at the GTS"},
+            {034, "Wonder Trades"},
+            {036, "Pokemon Rides"},
+            {037, "Beans Given"},
+            {038, "Festival Coins Spent"},
+            {039, "Poke Beans Collected"},
+            {040, "Battles at the Battle Tree"},
+            {041, "Z-Moves Used"},
+            {053, "Pokemon Petted"},
+            {066, "Guests Interacted With"},
+
+            {100, "Champion Title Defense"},
+            {110, "Pokemon Defeated"},
+            {112, "Pokemon Caught"},
+            {114, "Trainers Battled"},
+            {116, "Pokemon Evolved"},
+            {119, "Photos Taken"},
+            {123, "Loto-ID Wins"},
+            {124, "PP Raised"},
+            {127, "Shiny Pokemon Encountered"},
+            {128, "Missions Participated In"},
+            {129, "Facilities Hosted"},
+            {130, "QR Code Scans"},
+            {158, "Outfit Changes"},
+            {166, "Island Scans"},
+        };
     }
 }

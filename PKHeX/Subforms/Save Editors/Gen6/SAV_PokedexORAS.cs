@@ -23,7 +23,7 @@ namespace PKHeX
             // Fill List
             CB_Species.DisplayMember = "Text";
             CB_Species.ValueMember = "Value";
-            CB_Species.DataSource = new BindingSource(GameInfo.SpeciesDataSource.Skip(1).ToList(), null);
+            CB_Species.DataSource = new BindingSource(GameInfo.SpeciesDataSource.Skip(1).Where(id => id.Value <= SAV.MaxSpeciesID).ToList(), null);
 
             for (int i = 1; i < SAV.MaxSpeciesID + 1; i++)
                 LB_Species.Items.Add(i.ToString("000") + " - " + Main.GameStrings.specieslist[i]);
@@ -352,7 +352,7 @@ namespace PKHeX
                 }
 
             if (sender == mnuCaughtNone || sender == mnuCaughtAll || sender == mnuComplete)
-                for (int i = 0; i < CB_Species.Items.Count; i++)
+                for (int i = 0; i < LB_Species.Items.Count; i++)
                 {
                     int gt = SAV.Personal[i + 1].Gender;
                     LB_Species.SelectedIndex = i;
